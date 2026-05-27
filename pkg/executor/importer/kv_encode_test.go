@@ -20,10 +20,13 @@ import (
 
 	"github.com/pingcap/tidb/pkg/executor/importer"
 	"github.com/pingcap/tidb/pkg/lightning/backend/encode"
+	lightningkv "github.com/pingcap/tidb/pkg/lightning/backend/kv"
 	"github.com/pingcap/tidb/pkg/lightning/log"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/session"
+	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/types"
@@ -89,14 +92,20 @@ func TestKVEncoderForDupResolve(t *testing.T) {
 }
 
 func TestKVEncoderCastErrorMessage(t *testing.T) {
-	store := testkit.CreateMockStore(t)
-	tk := testkit.NewTestKit(t, store)
-	tk.MustExec("use test")
-	tk.MustExec("create table t(c1 tinyint)")
-
-	do, err := session.GetDomain(store)
-	require.NoError(t, err)
-	table, err := do.InfoSchema().TableByName(context.Background(), ast.NewCIStr("test"), ast.NewCIStr("t"))
+	c1 := &model.ColumnInfo{
+		ID:        1,
+		Name:      ast.NewCIStr("c1"),
+		State:     model.StatePublic,
+		Offset:    0,
+		FieldType: *types.NewFieldType(mysql.TypeTiny),
+	}
+	tblInfo := &model.TableInfo{
+		ID:      1,
+		Name:    ast.NewCIStr("t"),
+		State:   model.StatePublic,
+		Columns: []*model.ColumnInfo{c1},
+	}
+	table, err := tables.TableFromMeta(lightningkv.NewPanickingAllocators(tblInfo.SepAutoInc()), tblInfo)
 	require.NoError(t, err)
 
 	encodeCfg := &encode.EncodingConfig{
