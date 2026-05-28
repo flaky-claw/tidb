@@ -71,6 +71,15 @@ func TestLiveSessionManagerTracksLatestProcessInfo(t *testing.T) {
 	require.Equal(t, "analyze table t with 1.0 samplerate", liveInfo.Info)
 }
 
+func setGlobalAnalyzeMemQuotaForTest(t *testing.T, tk *testkit.TestKit, quota int64) {
+	t.Helper()
+	oldQuota := executor.GlobalAnalyzeMemoryTracker.GetBytesLimit()
+	tk.MustExec(fmt.Sprintf("set global tidb_mem_quota_analyze=%d", quota))
+	t.Cleanup(func() {
+		tk.MustExec(fmt.Sprintf("set global tidb_mem_quota_analyze=%d", oldQuota))
+	})
+}
+
 func TestGlobalMemoryControlForAnalyze(t *testing.T) {
 	store, dom := testkit.CreateMockStoreAndDomain(t)
 
@@ -235,7 +244,7 @@ func TestMemQuotaAnalyze(t *testing.T) {
 	tk.MustExec("insert ignore into tbl_2 values ( 84923,113,-973946646,406140,25040,51,'THQdwkQvppWZnULm',5469507709881346105,94,'oGNmoxLLgHkdyDCT' );")
 	tk.MustExec("insert ignore into tbl_2 values ( 0,-104,-488745187,-1941015,-2646,39,'jyKxfs',-5307175470406648836,46,'KZpfjFounVgFeRPa' );")
 	tk.MustExec("insert ignore into tbl_2 values ( 4,97,2105289255,1034363,28385,192,'',4429378142102752351,8,'jOk' );")
-	tk.MustExec("set global tidb_mem_quota_analyze=128;")
+	setGlobalAnalyzeMemQuotaForTest(t, tk, 128)
 	tk.MustExecToErr("analyze table tbl_2;")
 }
 
@@ -245,7 +254,7 @@ func TestMemQuotaAnalyze2(t *testing.T) {
 	tk.MustExec("use test")
 	tk.MustExec("create table tbl_2 ( col_20 decimal default 84232 , col_21 tinyint not null , col_22 int default 80814394 , col_23 mediumint default -8036687 not null , col_24 smallint default 9185 not null , col_25 tinyint unsigned default 65 , col_26 char(115) default 'ZyfroRODMbNDRZnPNRW' not null , col_27 bigint not null , col_28 tinyint not null , col_29 char(130) default 'UMApsVgzHblmY' , primary key idx_14 ( col_28,col_22 ) , unique key idx_15 ( col_24,col_22 ) , key idx_16 ( col_21,col_20,col_24,col_25,col_27,col_28,col_26,col_29 ) , key idx_17 ( col_24,col_25 ) , unique key idx_18 ( col_25,col_23,col_29,col_27,col_26,col_22 ) , key idx_19 ( col_25,col_22,col_26,col_23 ) , unique key idx_20 ( col_22,col_24,col_28,col_29,col_26,col_20 ) , key idx_21 ( col_25,col_24,col_26,col_29,col_27,col_22,col_28 ) );")
 	tk.MustExec("insert ignore into tbl_2 values ( 942,33,-1915007317,3408149,-3699,193,'Trywdis',1876334369465184864,115,null );")
-	tk.MustExec("set global tidb_mem_quota_analyze=128;")
+	setGlobalAnalyzeMemQuotaForTest(t, tk, 128)
 	tk.MustExecToErr("analyze table tbl_2;")
 }
 
