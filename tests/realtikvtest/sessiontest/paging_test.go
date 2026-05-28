@@ -113,17 +113,15 @@ func TestIndexReaderWithPaging(t *testing.T) {
 	tk.MustExec("use test;")
 	tk.MustExec("drop table if exists t;")
 	tk.MustExec("create table t (id int key, b int, c int, index idx (b), index idx2(c))")
-	tk.MustExec("begin")
 	for i := 0; i < 1024; i += 4 {
-		tk.MustExec(fmt.Sprintf("insert into t (id) values (%d), (%d), (%d), (%d)", i, i+1, i+2, i+3))
+		tk.MustExec(fmt.Sprintf("insert into t values (%d, %d, %d), (%d, %d, %d), (%d, %d, %d), (%d, %d, %d)",
+			i, i, i, i+1, i+1, i+1, i+2, i+2, i+2, i+3, i+3, i+3))
 	}
-	tk.MustExec(`update t set b = id, c = id`)
-	tk.MustExec("commit")
 	// Index lookup query with paging enabled.
 	tk.MustExec(`set @@tidb_enable_paging=1`)
 	tk.MustExec(`set @@tidb_min_paging_size=128`)
 	tk.MustExec("set @@tidb_max_chunk_size=1024;")
-	tk.MustQuery("select count(c) from t use index(idx);").Check(testkit.Rows("1024")) // full scan to resolve uncommitted lock.
+	tk.MustQuery("select count(c) from t use index(idx);").Check(testkit.Rows("1024"))
 	tk.MustQuery("select count(b) from t use index(idx2);").Check(testkit.Rows("1024"))
 	tk.MustQuery("select count(id) from t ignore index(idx, idx2)").Check(testkit.Rows("1024"))
 	// Test Index Lookup Reader query.
