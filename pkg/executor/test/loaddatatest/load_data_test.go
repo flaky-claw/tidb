@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/tidb/pkg/executor"
+	"github.com/pingcap/tidb/pkg/executor/importer"
 	"github.com/pingcap/tidb/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
@@ -478,12 +479,14 @@ func TestLoadDataIntoPartitionedTable(t *testing.T) {
 }
 
 func TestLoadDataFromServerFile(t *testing.T) {
-	store := testkit.CreateMockStore(t)
-	tk := testkit.NewTestKit(t, store)
-	tk.MustExec("use test")
-	tk.MustExec("create table load_data_test (a int)")
-	err := tk.ExecToErr("load data infile 'remote.csv' into table load_data_test")
-	require.ErrorContains(t, err, "[executor:8154]Don't support load data from tidb-server's disk.")
+	controller := importer.LoadDataController{
+		Plan: &importer.Plan{
+			Path: "remote.csv",
+		},
+	}
+	err := controller.InitDataFiles(context.Background())
+	require.ErrorIs(t, err, exeerrors.ErrLoadDataFromServerDisk)
+	require.ErrorContains(t, err, "Don't support load data from tidb-server's disk.")
 }
 
 func TestFix56408(t *testing.T) {
