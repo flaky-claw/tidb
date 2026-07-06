@@ -124,15 +124,22 @@ func TestExactStalenessTransaction(t *testing.T) {
 		t.Log(testcase.name)
 		require.NoError(t, failpoint.Enable("tikvclient/injectTxnScope", fmt.Sprintf(`return("%v")`, testcase.zone)))
 		tk.MustExec(testcase.preSQL)
+		var beforeTxnTS uint64
+		if !testcase.IsStaleness {
+			var err error
+			beforeTxnTS, err = store.GetOracle().GetTimestamp(context.Background(), &oracle.Option{TxnScope: oracle.GlobalTxnScope})
+			require.NoError(t, err)
+		}
 		tk.MustExec(testcase.sql)
 		require.Equal(t, testcase.IsStaleness, tk.Session().GetSessionVars().TxnCtx.IsStaleness)
 		if testcase.expectPhysicalTS > 0 {
 			require.Equal(t, testcase.expectPhysicalTS, oracle.ExtractPhysical(tk.Session().GetSessionVars().TxnCtx.StartTS))
 		} else if !testcase.IsStaleness {
-			curTS := oracle.ExtractPhysical(oracle.GoTimeToTS(time.Now()))
-			startTS := oracle.ExtractPhysical(tk.Session().GetSessionVars().TxnCtx.StartTS)
-			require.Less(t, curTS-startTS, time.Second.Milliseconds())
-			require.Less(t, startTS-curTS, time.Second.Milliseconds())
+			afterTxnTS, err := store.GetOracle().GetTimestamp(context.Background(), &oracle.Option{TxnScope: oracle.GlobalTxnScope})
+			require.NoError(t, err)
+			startTS := tk.Session().GetSessionVars().TxnCtx.StartTS
+			require.Greater(t, startTS, beforeTxnTS)
+			require.Less(t, startTS, afterTxnTS)
 		}
 		tk.MustExec("commit")
 	}
