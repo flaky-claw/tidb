@@ -50,6 +50,9 @@ func TestPlanStatsLoad(t *testing.T) {
 	testkit.RunTestUnderCascadesWithDomain(t, func(t *testing.T, testKit *testkit.TestKit, dom *domain.Domain, cascades, caller string) {
 		p := parser.New()
 		testKit.MustExec("use test")
+		// The test exercises sync stats loading; own one worker so requests cannot
+		// wait for the full session timeout if the ambient worker setup is delayed.
+		dom.StartLoadStatsSubWorkers(1)
 		ctx := testKit.Session().(sessionctx.Context)
 		testKit.MustExec("drop table if exists t")
 		testKit.MustExec("set @@session.tidb_analyze_version=2")
