@@ -194,18 +194,26 @@ func TestAnalyzeRestrict(t *testing.T) {
 		if kerneltype.IsNextGen() {
 			t.Skip("analyze restrict subtests mutate mysql.analyze_jobs")
 		}
+		// Use valid 64-bit global connection IDs so KILL TIDB QUERY reaches the local mock session manager.
+		const (
+			testServerID  uint64 = 1
+			analyzeConnID        = testServerID<<41 | 1<<1 | 1
+			killerConnID         = testServerID<<41 | 2<<1 | 1
+		)
 		tk.MustExec("truncate table mysql.analyze_jobs")
 		dom := domain.GetDomain(tk.Session())
 		origSM := dom.InfoSyncer().GetSessionManager()
 		sm := &killQuerySessionManager{
 			MockSessionManager: &testkit.MockSessionManager{
-				Conn: make(map[uint64]sessionapi.Session),
+				SerID: testServerID,
+				Conn:  make(map[uint64]sessionapi.Session),
 			},
 		}
 		dom.InfoSyncer().SetSessionManager(sm)
 		defer dom.InfoSyncer().SetSessionManager(origSM)
 
 		tkAnalyze := testkit.NewTestKit(t, store)
+		tkAnalyze.Session().SetConnectionID(analyzeConnID)
 		tkAnalyze.Session().SetSessionManager(sm)
 		sm.Conn[tkAnalyze.Session().GetSessionVars().ConnectionID] = tkAnalyze.Session()
 		tkAnalyze.MustExec("use test")
@@ -215,6 +223,7 @@ func TestAnalyzeRestrict(t *testing.T) {
 		tkAnalyze.MustExec("set @@tidb_analyze_version = 2")
 
 		tkKiller := testkit.NewTestKit(t, store)
+		tkKiller.Session().SetConnectionID(killerConnID)
 		tkKiller.Session().GetSessionVars().User = &auth.UserIdentity{}
 		tkKiller.Session().SetSessionManager(sm)
 		sm.Conn[tkKiller.Session().GetSessionVars().ConnectionID] = tkKiller.Session()
