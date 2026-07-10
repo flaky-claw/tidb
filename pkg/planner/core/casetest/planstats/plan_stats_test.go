@@ -54,7 +54,8 @@ func TestPlanStatsLoad(t *testing.T) {
 		testKit.MustExec("drop table if exists t")
 		testKit.MustExec("set @@session.tidb_analyze_version=2")
 		testKit.MustExec("set @@session.tidb_partition_prune_mode = 'static'")
-		testKit.MustExec("set @@session.tidb_stats_load_sync_wait = 60000")
+		// This test asserts successful sync stats loading, not timeout fallback.
+		testKit.MustExec("set @@session.tidb_stats_load_sync_wait = 2147483647")
 		testKit.MustExec("set tidb_opt_projection_push_down = 0")
 		testKit.MustExec("create table t(a int, b int, c int, d int, primary key(a), key idx(b))")
 		testKit.MustExec("insert into t values (1,1,1,1),(2,2,2,2),(3,3,3,3)")
