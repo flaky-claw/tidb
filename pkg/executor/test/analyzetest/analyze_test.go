@@ -230,13 +230,18 @@ func TestAnalyzeRestrict(t *testing.T) {
 			done <- err
 		}()
 
-		select {
-		case err := <-done:
-			t.Fatalf("analyze finished before kill query, err=%v", err)
-		case <-time.After(50 * time.Millisecond):
-		}
-
 		connID := tkAnalyze.Session().GetSessionVars().ConnectionID
+		require.Eventually(t, func() bool {
+			select {
+			case err := <-done:
+				t.Fatalf("analyze finished before kill query, err=%v", err)
+			default:
+			}
+			rows := tkKiller.MustQuery(
+				"select state from mysql.analyze_jobs where table_schema = 'test' and table_name = 't' order by start_time desc limit 1",
+			).Rows()
+			return len(rows) == 1 && strings.EqualFold(rows[0][0].(string), "running")
+		}, 5*time.Second, 10*time.Millisecond)
 		tkKiller.MustExec(fmt.Sprintf("kill tidb query %d", connID))
 
 		select {
