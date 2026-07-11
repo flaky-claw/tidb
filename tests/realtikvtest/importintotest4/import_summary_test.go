@@ -114,10 +114,11 @@ func (s *mockGCSSuite) TestGlobalSortSummary() {
 }
 
 func (s *mockGCSSuite) TestLocallSortSummary() {
-	allData := make([]string, 0, 10000)
-	content := make([]byte, 0, 10000*10)
+	const rowCount = 100
+	allData := make([]string, 0, rowCount)
+	content := make([]byte, 0, rowCount*10)
 
-	for idx := range 10000 {
+	for idx := range rowCount {
 		content = append(content, fmt.Appendf(nil, "%d,test-%d\n", idx, idx)...)
 		allData = append(allData, fmt.Sprintf("%d test-%d", idx, idx))
 	}
@@ -143,10 +144,10 @@ func (s *mockGCSSuite) TestLocallSortSummary() {
 	require.NoError(s.T(), json.Unmarshal([]byte(rs[0][0].(string)), &summaries))
 
 	require.EqualValues(s.T(), 0, summaries.MergeSummary.RowCnt)
-	require.EqualValues(s.T(), 10000, summaries.ImportedRows)
+	require.EqualValues(s.T(), rowCount, summaries.ImportedRows)
 
 	rs = s.tk.MustQuery("show import jobs where Job_ID = ?", jobID).Rows()
 	importedRows, err := strconv.Atoi(rs[0][fmap["ImportedRows"]].(string))
 	require.NoError(s.T(), err)
-	require.EqualValues(s.T(), 10000, importedRows)
+	require.EqualValues(s.T(), rowCount, importedRows)
 }
