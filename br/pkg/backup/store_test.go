@@ -55,44 +55,40 @@ func (mbbc *MockBackupBackupClient) Recv() (*backuppb.BackupResponse, error) {
 func TestTimeoutRecv(t *testing.T) {
 	ctx := context.Background()
 	originTimeout := TimeoutOneResponse
-	TimeoutOneResponse = time.Millisecond * 800
+	timeout := time.Millisecond * 800
+	TimeoutOneResponse = timeout
 	t.Cleanup(func() {
 		TimeoutOneResponse = originTimeout
 	})
-	recordTimeoutErr := func(ctx context.Context, timeoutObserved chan<- bool) error {
-		err := ctx.Err()
-		timeoutObserved <- err != nil
-		if err != nil {
-			return err
+	waitForTimeoutErr := func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(timeout * 10):
+			return context.DeadlineExceeded
 		}
-		return context.Canceled
 	}
 	// Just Timeout Once
 	{
-		timeoutObserved := make(chan bool, 1)
 		err := startBackup(ctx, 0, NewResourceMemoryLimiter(100), backuppb.BackupRequest{}, &MockBackupClient{
 			recvFunc: func(ctx context.Context) (*backuppb.BackupResponse, error) {
-				time.Sleep(time.Second)
-				return nil, recordTimeoutErr(ctx, timeoutObserved)
+				return nil, waitForTimeoutErr(ctx)
 			},
 		}, 1, nil)
 		require.Error(t, err)
-		require.True(t, <-timeoutObserved)
+		require.ErrorIs(t, err, context.Canceled)
 	}
 
 	// Timeout Not At First
 	{
 		count := 0
-		timeoutObserved := make(chan bool, 1)
 		err := startBackup(ctx, 0, NewResourceMemoryLimiter(100), backuppb.BackupRequest{}, &MockBackupClient{
 			recvFunc: func(ctx context.Context) (*backuppb.BackupResponse, error) {
 				if err := ctx.Err(); err != nil {
-					timeoutObserved <- true
 					return nil, err
 				}
 				if count == 15 {
-					time.Sleep(time.Second)
-					return nil, recordTimeoutErr(ctx, timeoutObserved)
+					return nil, waitForTimeoutErr(ctx)
 				}
 				count += 1
 				time.Sleep(time.Millisecond * 80)
@@ -100,8 +96,8 @@ func TestTimeoutRecv(t *testing.T) {
 			},
 		}, 1, make(chan *ResponseAndStore, 15))
 		require.Error(t, err)
+		require.ErrorIs(t, err, context.Canceled)
 		require.Equal(t, count, 15)
-		require.True(t, <-timeoutObserved)
 	}
 }
 
