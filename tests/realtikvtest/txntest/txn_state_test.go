@@ -34,6 +34,15 @@ func TestBasicTxnState(t *testing.T) {
 
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("use test")
+	waitTxnInfoState := func(state txninfo.TxnRunningState) *txninfo.TxnInfo {
+		t.Helper()
+		var info *txninfo.TxnInfo
+		require.Eventually(t, func() bool {
+			info = tk.Session().TxnInfo()
+			return info != nil && info.State == state
+		}, 5*time.Second, 10*time.Millisecond)
+		return info
+	}
 
 	tk.MustExec("create table t(a int);")
 	tk.MustExec("insert into t(a) values (1);")
@@ -48,14 +57,13 @@ func TestBasicTxnState(t *testing.T) {
 	require.NoError(t, failpoint.Enable("tikvclient/beforePessimisticLock", "pause"))
 	defer func() { require.NoError(t, failpoint.Disable("tikvclient/beforePessimisticLock")) }()
 	ch := make(chan any)
+	_, expectedDigest := parser.NormalizeDigest("select * from t for update;")
 	go func() {
 		tk.MustExec("select * from t for update;")
 		ch <- nil
 	}()
-	time.Sleep(100 * time.Millisecond)
 
-	info = tk.Session().TxnInfo()
-	_, expectedDigest := parser.NormalizeDigest("select * from t for update;")
+	info = waitTxnInfoState(txninfo.TxnLockAcquiring)
 	require.Equal(t, expectedDigest.String(), info.CurrentSQLDigest)
 	require.Equal(t, txninfo.TxnLockAcquiring, info.State)
 	require.True(t, info.BlockStartTime.Valid)
@@ -80,13 +88,12 @@ func TestBasicTxnState(t *testing.T) {
 	require.Equal(t, startTS, info.StartTS)
 
 	require.NoError(t, failpoint.Enable("tikvclient/beforePrewrite", "pause"))
+	_, commitDigest := parser.NormalizeDigest("commit;")
 	go func() {
 		tk.MustExec("commit;")
 		ch <- nil
 	}()
-	time.Sleep(100 * time.Millisecond)
-	_, commitDigest := parser.NormalizeDigest("commit;")
-	info = tk.Session().TxnInfo()
+	info = waitTxnInfoState(txninfo.TxnCommitting)
 	require.Equal(t, commitDigest.String(), info.CurrentSQLDigest)
 	require.Equal(t, txninfo.TxnCommitting, info.State)
 	require.Equal(t, []string{beginDigest.String(), selectTSDigest.String(), expectedDigest.String(), commitDigest.String()}, info.AllSQLDigests)
@@ -98,13 +105,12 @@ func TestBasicTxnState(t *testing.T) {
 
 	// Test autocommit transaction
 	require.NoError(t, failpoint.Enable("tikvclient/beforePrewrite", "pause"))
+	_, expectedDigest = parser.NormalizeDigest("insert into t values (2)")
 	go func() {
 		tk.MustExec("insert into t values (2)")
 		ch <- nil
 	}()
-	time.Sleep(100 * time.Millisecond)
-	info = tk.Session().TxnInfo()
-	_, expectedDigest = parser.NormalizeDigest("insert into t values (2)")
+	info = waitTxnInfoState(txninfo.TxnCommitting)
 	require.Equal(t, expectedDigest.String(), info.CurrentSQLDigest)
 	require.Equal(t, txninfo.TxnCommitting, info.State)
 	require.False(t, info.BlockStartTime.Valid)
