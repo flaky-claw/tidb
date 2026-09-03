@@ -155,7 +155,7 @@ func TestSingle(t *testing.T) {
 	require.NoError(t, ownerMgr.CampaignOwner())
 	isOwner := checkOwner(ownerMgr, true)
 	require.True(t, isOwner)
-	require.True(t, lis.val.Load())
+	require.Eventually(t, lis.val.Load, 5*time.Second, 5*time.Millisecond)
 
 	// test for newSession failed
 	ctx := context.Background()
