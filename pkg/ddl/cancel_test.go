@@ -306,11 +306,14 @@ func TestCancelVariousJobs(t *testing.T) {
 	canceled := atomicutil.NewBool(false)
 	cancelResult := atomicutil.NewBool(false)
 	cancelWhenReorgNotStart := atomicutil.NewBool(false)
+	writeReorgNoRowSeen := atomicutil.NewBool(false)
 
 	hookFunc := func(job *model.Job) {
 		if testutil.MatchCancelState(t, job, allTestCase[i.Load()].cancelState, allTestCase[i.Load()].sql) && !canceled.Load() {
 			if !cancelWhenReorgNotStart.Load() && job.SchemaState == model.StateWriteReorganization && job.MayNeedReorg() && job.RowCount == 0 {
-				return
+				if writeReorgNoRowSeen.CompareAndSwap(false, true) {
+					return
+				}
 			}
 			rs := tkCancel.MustQuery(fmt.Sprintf("admin cancel ddl jobs %d", job.ID))
 			cancelResult.Store(cancelSuccess(rs))
@@ -343,6 +346,7 @@ func TestCancelVariousJobs(t *testing.T) {
 				}
 				waitDDLWorkerExited()
 				canceled.Store(false)
+				writeReorgNoRowSeen.Store(false)
 				cancelWhenReorgNotStart.Store(true)
 				registerHook(true)
 				if tc.expectCancelled {
@@ -362,6 +366,7 @@ func TestCancelVariousJobs(t *testing.T) {
 				}
 				waitDDLWorkerExited()
 				canceled.Store(false)
+				writeReorgNoRowSeen.Store(false)
 				cancelWhenReorgNotStart.Store(false)
 				registerHook(false)
 				if tc.expectCancelled {
