@@ -243,8 +243,9 @@ func createGCWorkerSuite(t *testing.T, opts ...mockGCWorkerSuiteOption) *mockGCW
 
 	gcWorker, err := NewGCWorker(s.store, s.pdClient)
 	require.NoError(t, err)
-	gcWorker.Start()
-	gcWorker.Close()
+	// Initialize GC metadata synchronously. Starting and immediately closing a
+	// worker leaves an exiting goroutine racing with tests that read done.
+	gcWorker.tick(gcContext())
 	s.gcWorker = gcWorker
 
 	return s
