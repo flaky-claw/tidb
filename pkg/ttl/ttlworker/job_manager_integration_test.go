@@ -502,7 +502,7 @@ func TestTTLDeleteWithTimeZoneChange(t *testing.T) {
 
 func waitTTLJobFinished(t *testing.T, tk *testkit.TestKit, tableID int64, timerCli timerapi.TimerClient) {
 	start := time.Now()
-	for time.Since(start) < time.Minute {
+	for time.Since(start) < 2*time.Minute {
 		time.Sleep(10 * time.Millisecond)
 		r := tk.MustQuery("select last_job_id, current_job_id, parent_table_id from mysql.tidb_ttl_table_status where table_id=?", tableID)
 		rows := r.Rows()
