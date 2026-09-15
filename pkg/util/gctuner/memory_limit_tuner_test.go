@@ -170,12 +170,15 @@ func TestIssue48741(t *testing.T) {
 			},
 			5*time.Second, 100*time.Millisecond)
 
-		// update memoryLimit, and sleep 500ms, let t.UpdateMemoryLimit() be called.
+		// Update memoryLimit through the same path used when the global variable changes.
 		memory.ServerMemoryLimit.Store(1500 << 20) // 1.5 GB
-		time.Sleep(500 * time.Millisecond)
-		// UpdateMemoryLimit success during tunning.
-		require.True(t, GlobalMemoryLimitTuner.adjustPercentageInProgress.Load())
-		require.Equal(t, debug.SetMemoryLimit(-1), int64(1500<<20*80/100))
+		require.Eventually(t, func() bool {
+			if !GlobalMemoryLimitTuner.adjustPercentageInProgress.Load() {
+				return false
+			}
+			GlobalMemoryLimitTuner.UpdateMemoryLimit()
+			return debug.SetMemoryLimit(-1) == int64(1500<<20*80/100)
+		}, 5*time.Second, 100*time.Millisecond)
 		waitingTunningFinishFn()
 		// After the GC triggered by memory810mb.
 		gcNumAfterMemory810mb := getMemoryLimitGCTotal()
