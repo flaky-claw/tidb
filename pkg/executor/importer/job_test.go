@@ -349,6 +349,9 @@ func TestCancelPendingJob(t *testing.T) {
 	runningJobID, err := importer.CreateJob(ctx, conn, "test", "t", 1, "root@%", "", parameters, 123)
 	require.NoError(t, err)
 	require.NoError(t, importer.StartJob(ctx, conn, runningJobID, importer.JobStepImporting))
+	t.Cleanup(func() {
+		require.NoError(t, importer.CancelJob(ctx, conn, runningJobID))
+	})
 	cnt, err = importer.GetActiveJobCnt(ctx, conn, "test", "t")
 	require.NoError(t, err)
 	require.Equal(t, int64(1), cnt)
