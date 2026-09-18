@@ -51,7 +51,7 @@ func TestLocalTemporaryTableUpdate(t *testing.T) {
 		for _, id := range idList {
 			expect = append(expect, fmt.Sprintf("%d %d %d", id, id+100, id+1000))
 		}
-		tk.MustQuery("select * from tmp1").Check(testkit.Rows(expect...))
+		tk.MustQuery("select * from tmp1 order by id").Check(testkit.Rows(expect...))
 	}
 
 	checkUpdatesAndDeletes := func(updates []string, deletes []int) {
@@ -95,7 +95,7 @@ func TestLocalTemporaryTableUpdate(t *testing.T) {
 			expect = append(expect, modify)
 		}
 
-		tk.MustQuery("select * from tmp1").Check(testkit.Rows(expect...))
+		tk.MustQuery("select * from tmp1 order by id").Check(testkit.Rows(expect...))
 	}
 
 	type checkSuccess struct {
