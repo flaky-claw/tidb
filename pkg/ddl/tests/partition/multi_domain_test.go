@@ -25,13 +25,13 @@ import (
 	"testing"
 	"time"
 
+	ddlutil "github.com/pingcap/tidb/pkg/ddl/util"
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/sessiontxn"
-	"github.com/pingcap/tidb/pkg/store/gcworker"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
@@ -898,6 +898,16 @@ func runMultiSchemaTest(t *testing.T, createSQL, alterSQL string, initFn func(*t
 	runMultiSchemaTestWithBackfillDML(t, createSQL, alterSQL, "", initFn, postFn, loopFn, retestWithoutPartitions)
 }
 func runMultiSchemaTestWithBackfillDML(t *testing.T, createSQL, alterSQL, backfillDML string, initFn func(*testkit.TestKit), postFn func(*testkit.TestKit, kv.Storage), loopFn func(tO, tNO *testkit.TestKit), retestWithoutPartitions bool) {
+	originEmulatorGC := ddlutil.IsEmulatorGCEnable()
+	ddlutil.EmulatorGCEnable()
+	defer func() {
+		if originEmulatorGC {
+			ddlutil.EmulatorGCEnable()
+		} else {
+			ddlutil.EmulatorGCDisable()
+		}
+	}()
+
 	// When debugging, increase the lease, so the schema does not auto reload :)
 	distCtx := testkit.NewDistExecutionContextWithLease(t, 2, 15*time.Second)
 	store := distCtx.Store
@@ -1067,11 +1077,9 @@ func runMultiSchemaTestWithBackfillDML(t *testing.T, createSQL, alterSQL, backfi
 		logutil.BgLogger().Info("Query result after DDL", zap.String("result", res.String()))
 	}
 	// Verify that there are no KV entries for old partitions or old indexes!!!
-	gcWorker, err := gcworker.NewMockGCWorker(store)
-	require.NoError(t, err)
-	err = gcWorker.DeleteRanges(context.Background(), uint64(math.MaxInt64))
-	require.NoError(t, err)
-	tkO.MustQuery(`select * from mysql.gc_delete_range`).Check(testkit.Rows())
+	require.Eventually(t, func() bool {
+		return len(tkO.MustQuery(`select * from mysql.gc_delete_range`).Rows()) == 0
+	}, 10*time.Second, time.Millisecond)
 	ctx = tkO.Session()
 	is = domain.GetDomain(ctx).InfoSchema()
 	tbl, err = is.TableByName(context.Background(), ast.NewCIStr("test"), ast.NewCIStr("t"))
