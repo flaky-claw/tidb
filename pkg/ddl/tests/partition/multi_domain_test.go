@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/sessiontxn"
-	"github.com/pingcap/tidb/pkg/store/gcworker"
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
@@ -1066,11 +1065,11 @@ func runMultiSchemaTestWithBackfillDML(t *testing.T, createSQL, alterSQL, backfi
 		res := tkO.MustQuery(`select *, _tidb_rowid from t`)
 		logutil.BgLogger().Info("Query result after DDL", zap.String("result", res.String()))
 	}
-	// Verify that there are no KV entries for old partitions or old indexes!!!
-	gcWorker, err := gcworker.NewMockGCWorker(store)
-	require.NoError(t, err)
-	err = gcWorker.DeleteRanges(context.Background(), uint64(math.MaxInt64))
-	require.NoError(t, err)
+	// The unistore UnsafeDestroyRange path is a no-op; wait for DDL's delRange emulator to delete keys.
+	require.Eventually(t, func() bool {
+		rows := tkO.MustQuery(`select count(*) from mysql.gc_delete_range`).Rows()
+		return fmt.Sprint(rows[0][0]) == "0"
+	}, 5*time.Second, 10*time.Millisecond)
 	tkO.MustQuery(`select * from mysql.gc_delete_range`).Check(testkit.Rows())
 	ctx = tkO.Session()
 	is = domain.GetDomain(ctx).InfoSchema()
