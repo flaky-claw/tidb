@@ -1067,11 +1067,17 @@ func runMultiSchemaTestWithBackfillDML(t *testing.T, createSQL, alterSQL, backfi
 		logutil.BgLogger().Info("Query result after DDL", zap.String("result", res.String()))
 	}
 	// Verify that there are no KV entries for old partitions or old indexes!!!
-	gcWorker, err := gcworker.NewMockGCWorker(store)
-	require.NoError(t, err)
-	err = gcWorker.DeleteRanges(context.Background(), uint64(math.MaxInt64))
-	require.NoError(t, err)
-	tkO.MustQuery(`select * from mysql.gc_delete_range`).Check(testkit.Rows())
+	if store.SupportDeleteRange() {
+		gcWorker, err := gcworker.NewMockGCWorker(store)
+		require.NoError(t, err)
+		err = gcWorker.DeleteRanges(context.Background(), uint64(math.MaxInt64))
+		require.NoError(t, err)
+		tkO.MustQuery(`select * from mysql.gc_delete_range`).Check(testkit.Rows())
+	} else {
+		require.Eventually(t, func() bool {
+			return len(tkO.MustQuery(`select * from mysql.gc_delete_range`).Rows()) == 0
+		}, 5*time.Second, time.Millisecond)
+	}
 	ctx = tkO.Session()
 	is = domain.GetDomain(ctx).InfoSchema()
 	tbl, err = is.TableByName(context.Background(), ast.NewCIStr("test"), ast.NewCIStr("t"))
