@@ -192,22 +192,26 @@ func TestLookup(t *testing.T) {
 	// single thread build
 	subTable.build(0, len(rowTable.segments), tagHelper)
 
+	rowsByHash := make(map[uint64]map[unsafe.Pointer]struct{})
 	for _, seg := range rowTable.segments {
 		for index := range seg.rowStartOffset {
 			hashValue := seg.hashValues[index]
-			candidate := subTable.lookup(hashValue, tagHelper)
 			loc := seg.getRowPointer(index)
-			found := false
-			for candidate != 0 {
-				candidatePtr := tagHelper.toUnsafePointer(candidate)
-				if candidatePtr == loc {
-					found = true
-					break
-				}
-				candidate = getNextRowAddress(candidatePtr, tagHelper, hashValue)
+			if rowsByHash[hashValue] == nil {
+				rowsByHash[hashValue] = make(map[unsafe.Pointer]struct{})
 			}
-			require.True(t, found)
+			rowsByHash[hashValue][loc] = struct{}{}
 		}
+	}
+	for hashValue, rows := range rowsByHash {
+		for candidate := subTable.lookup(hashValue, tagHelper); candidate != 0; {
+			candidatePtr := tagHelper.toUnsafePointer(candidate)
+			_, ok := rows[candidatePtr]
+			require.True(t, ok)
+			delete(rows, candidatePtr)
+			candidate = getNextRowAddress(candidatePtr, tagHelper, hashValue)
+		}
+		require.Empty(t, rows)
 	}
 }
 
