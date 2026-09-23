@@ -303,6 +303,27 @@ func (m *JobManager) RunningJobs() []*TTLJob {
 	return m.runningJobs
 }
 
+// SetRunningJobsForTest sets running jobs and their cached owners for tests.
+func (m *JobManager) SetRunningJobsForTest(ownerIDs ...string) {
+	m.runningJobs = make([]*ttlJob, 0, len(ownerIDs))
+	m.tableStatusCache.Tables = make(map[int64]*cache.TableStatus, len(ownerIDs))
+	for idx, ownerID := range ownerIDs {
+		tableID := int64(idx + 1)
+		jobID := "job-" + string(rune('a'+idx))
+		m.runningJobs = append(m.runningJobs, &ttlJob{
+			id:      jobID,
+			ownerID: m.id,
+			tableID: tableID,
+			status:  cache.JobStatusRunning,
+		})
+		m.tableStatusCache.Tables[tableID] = &cache.TableStatus{
+			TableID:           tableID,
+			CurrentJobID:      jobID,
+			CurrentJobOwnerID: ownerID,
+		}
+	}
+}
+
 // InfoSchemaCache is an exported getter of infoSchemaCache for test
 func (m *JobManager) InfoSchemaCache() *cache.InfoSchemaCache {
 	return m.infoSchemaCache

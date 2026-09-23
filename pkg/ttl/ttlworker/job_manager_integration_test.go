@@ -2429,7 +2429,14 @@ func testIterationOfRunningJobWithTimeout(t *testing.T, sessionTimeout time.Dura
 
 func TestIterationOfRunningJob(t *testing.T) {
 	t.Run("normal", func(t *testing.T) {
-		testIterationOfRunningJobWithTimeout(t, time.Minute, 100, 0)
+		m := ttlworker.NewJobManager("test-job-manager", nil, nil, nil, func() bool { return true })
+		m.SetRunningJobsForTest("another-id", "another-id", "another-id")
+
+		require.Len(t, m.RunningJobs(), 3)
+		m.CheckNotOwnJob()
+
+		// Now all the jobs should have been removed
+		require.Len(t, m.RunningJobs(), 0)
 	})
 	t.Run("session-timeout", func(t *testing.T) {
 		// Keep the timeout short enough to catch accidental long-lived session reuse,
