@@ -23,10 +23,15 @@ import (
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/auth"
+	plannercore "github.com/pingcap/tidb/pkg/planner/core"
+	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
+	"github.com/pingcap/tidb/pkg/util/hint"
+	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -539,8 +544,11 @@ func TestFlushStatsDelta(t *testing.T) {
 	})
 
 	t.Run("requires default db for bare table", func(t *testing.T) {
-		store, _ := testkit.CreateMockStoreAndDomain(t)
-		tk := testkit.NewTestKit(t, store)
-		tk.MustGetDBError("flush stats_delta t1", plannererrors.ErrNoDB)
+		stmt, err := parser.New().ParseOneStmt("flush stats_delta t1", "", "")
+		require.NoError(t, err)
+
+		builder, _ := plannercore.NewPlanBuilder().Init(mock.NewContext().GetPlanCtx(), nil, hint.NewQBHintHandler(nil))
+		_, err = builder.Build(context.Background(), resolve.NewNodeW(stmt))
+		require.ErrorIs(t, err, plannererrors.ErrNoDB)
 	})
 }
