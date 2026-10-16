@@ -80,6 +80,10 @@ func TestLockUnchangedUniqueKeys(t *testing.T) {
 	tk2.MustExec("use test")
 
 	for _, shouldLock := range []bool{true, false} {
+		if !shouldLock {
+			// A blocked insert must fail promptly, rather than wait for the default 50-second lock timeout.
+			tk2.MustExec("set @@innodb_lock_wait_timeout = 1")
+		}
 		for _, tt := range []struct {
 			name          string
 			create        string
@@ -169,6 +173,13 @@ func TestLockUnchangedUniqueKeys(t *testing.T) {
 
 					tk1.MustExec(tt.update)
 
+					if !shouldLock && !tt.isClusteredPK {
+						defer tk1.MustExec("rollback")
+						_, err := tk2.Exec(tt.insert)
+						require.True(t, kv.ErrKeyExists.Equal(err), "unexpected insert error: %v", err)
+						return
+					}
+
 					errCh := make(chan error, 1)
 					go func() {
 						_, err := tk2.Exec(tt.insert)
@@ -177,9 +188,6 @@ func TestLockUnchangedUniqueKeys(t *testing.T) {
 
 					select {
 					case <-time.After(100 * time.Millisecond):
-						if !shouldLock && !tt.isClusteredPK {
-							require.Fail(t, "insert is blocked by update")
-						}
 						tk1.MustExec("rollback")
 						require.Error(t, <-errCh)
 					case err := <-errCh:
